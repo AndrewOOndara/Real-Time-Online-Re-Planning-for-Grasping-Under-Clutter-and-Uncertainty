@@ -21,19 +21,9 @@ p.setRealTimeSimulation(0)
 # define gravity
 p.setGravity(0,0,-10)
 
-
-def resetSimulation():
-        p.resetSimulation()
-        turtle = p.loadURDF("urdf/most_simple_turtle.urdf",[0,0,1])
-        plane = p.loadURDF("plane100.urdf")
-        target = p.loadURDF("urdf/target.urdf", [3,0,1])
-        obstacle = p.loadURDF("urdf/box.urdf", [2,0,1])
-        p.setGravity(0, 0, -10)
-        forward = 0
-        turn = 0
 foward = 0
 turn=0
-speed=20
+speed=50
 
 goal_state = np.array([3, 0, 0])
 obstacle_state = np.array([2, 0, 0])
@@ -96,13 +86,14 @@ def psto(robot, goal_state, obstacle_state, delta_t, num_samples, num_iters):
 # generate random actions until the turtle reaches the target
 # initialize robot and goal state
 robot_state = get_robot_state(turtle)
-goal_state = np.array([3, 0, 0])
-obstacle_state = np.array([2, 0, 0])
+
 
 # set up PBSTO parameters
-delta_t = 0.3
-num_samples = 100
-num_iters = 100
+delta_t = 0.01
+num_samples = 30
+num_iters = 30
+
+p.setTimeStep(0.01)
 
 # generate random actions until the turtle reaches the target
 while (not p.getClosestPoints(turtle, target, distance=0)):
