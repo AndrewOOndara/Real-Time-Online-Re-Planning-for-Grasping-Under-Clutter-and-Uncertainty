@@ -45,7 +45,7 @@ def set_robot_state(robot, state):
 def reset_simulation():
     p.resetBasePositionAndOrientation(turtle, [0,0,1], [0,0,0,1])
     p.resetBasePositionAndOrientation(target, [3,0,1], [0,0,0,1])
-    p.resetBasePositionAndOrientation(target, [3,0,1], [0,0,0,1])
+    p.resetBasePositionAndOrientation(obstacle, [2,0,1], [0,0,0,1])
 
 
 def psto(robot, start_state, goal_state, delta_t, num_samples, num_iters):
