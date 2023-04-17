@@ -8,11 +8,23 @@ p.connect(p.GUI)
 
 p.setAdditionalSearchPath(pd.getDataPath())
 
+p.setRealTimeSimulation(0)
+
 # load files and place them at the offsets
-turtle = p.loadURDF("urdf/most_simple_turtle.urdf",[0,0,1])
+start_position = [0, 0, 1]
+goal_state = np.array([3, 0, 0])
+
+# calculate the angle between the robot and the target
+angle = np.arctan2(goal_state[1] - start_position[1], goal_state[0] - start_position[0])
+
+# load files and place them at the offsets
+# set the orientation of the robot
+ori = p.getQuaternionFromEuler([0, 0, angle])
+turtle = p.loadURDF("urdf/most_simple_turtle.urdf",[0,0,1], ori)
 plane = p.loadURDF("plane100.urdf")
 target = p.loadURDF("urdf/target.urdf", [3,0,1])
-obstacle = p.loadURDF("urdf/target.urdf", [2,0,1])
+obstacle = p.loadURDF("urdf/box.urdf", [2,0,1])
+
 
 
 # disable real time simulation
@@ -21,17 +33,18 @@ p.setRealTimeSimulation(0)
 # define gravity
 p.setGravity(0,0,-10)
 
-foward = 0
-turn=0
-speed=10
-
-goal_state = np.array([3, 0, 0])
-
 # Helper function to get the robot's state
 def get_robot_state(robot):
     pos, ori = p.getBasePositionAndOrientation(robot)
     euler = p.getEulerFromQuaternion(ori)
     vel, ang_vel = p.getBaseVelocity(robot)
+    return np.array([pos[0], pos[1], euler[2], vel[0], vel[1], ang_vel[2]])
+
+# Helper function to get the robot's state
+def get_target_state(target):
+    pos, ori = p.getBasePositionAndOrientation(target)
+    euler = p.getEulerFromQuaternion(ori)
+    vel, ang_vel = p.getBaseVelocity(target)
     return np.array([pos[0], pos[1], euler[2], vel[0], vel[1], ang_vel[2]])
 
 # Helper function to set the robot's state
@@ -47,36 +60,26 @@ def reset_simulation():
     p.resetBasePositionAndOrientation(target, [3,0,1], [0,0,0,1])
     p.resetBasePositionAndOrientation(obstacle, [2,0,1], [0,0,0,1])
 
+def add_gaussian_noise(path, std):
+    return path + np.random.normal(loc=0, scale=std, size=path.shape)
 
-def psto(robot, start_state, goal_state, delta_t, num_samples, num_iters):
-    # Initialize the robot's state
-    robot_state = start_state
+def psto(robot, start_state, initial_control_sequence, num_iters, path_std):
     
-    # Loop over the specified number of iterations
+    # Initialize the path and control input arrays
+    control_input = np.zeros((num_iters, initial_control_sequence.shape[1]))
+    
+    
     for i in range(num_iters):
-        # Generate next state samples using dynamics
-        control_input_samples = np.random.uniform(low=-1.0, high=1.0, size=(num_samples, 2))
-        next_state_samples = np.zeros((num_samples, 6))
-        for j in range(num_samples):
-            next_state_samples[j] = robot_state + delta_t*np.hstack((np.cos(robot_state[2])*control_input_samples[j, 0], np.sin(robot_state[2])*control_input_samples[j, 0], 0, control_input_samples[j, 1], 0, 0))
+        # Add Gaussian noise to the initial control sequence
+        noise = np.random.normal(loc=0, scale=path_std, size=initial_control_sequence.shape[1])
+        if i == 0 or i == 1:
+            noise[1] = 0.0
+        noisy_control_input = initial_control_sequence[i] + noise
         
-        # Compute costs for each next state sample
-        costs = np.linalg.norm(next_state_samples[:, :2] - goal_state[:2], axis=1)
-        
-        # Get the best next state and control input
-        best_idx = np.argmin(costs)
-        best_next_state = next_state_samples[best_idx]
-        best_control_input = control_input_samples[best_idx]
-        
-        # Update the robot's state
-        robot_state = best_next_state
-        
-        # Check if the goal has been reached
-        if np.linalg.norm(robot_state[:2] - goal_state[:2]) < 0.1:
-            break
+        control_input[i] = noisy_control_input
     
-    # Return the best control input
-    return best_control_input
+    # Return the generated path and the control input
+    return control_input
 
 
 
@@ -88,71 +91,61 @@ robot_state = get_robot_state(turtle)
 # set up PBSTO parameters
 delta_t = 0.01
 num_samples = 100
-num_iters = 100
+num_iters = 50
 num_paths = 10
 path_std = 0.1
+speed = 1
 
-p.setTimeStep(0.01)
+p.setTimeStep(1/40)
 
 # initialize robot and goal state
 start_state = get_robot_state(turtle)
-goal_state = np.array([2, 0, 0])
-
-while True:
+max = 0
+while np.linalg.norm(robot_state[:2] - get_target_state(target)[:2]) >= 0.65:
     # Reset the simulation
     reset_simulation()
+    print("reset")
     
-    # Generate initial path straight toward the obstacle
-    path = np.zeros((num_iters, 2))
-    path[:, 0] = 1.0
-    path[:, 1] = 0.0
+    # Generate initial control sequence straight toward the obstacle
+    initial_control_sequence = np.zeros((num_iters, 2))
+    initial_control_sequence[:, 0] = 1.0
+    initial_control_sequence[:, 1] = 0.0
     
-    # Follow the initial path
-    for i in range(num_iters):
-        forward = path[i, 0]
-        turn = path[i, 1]
-        p.setJointMotorControl2(turtle, 0, p.VELOCITY_CONTROL, targetVelocity=(forward-turn)*speed, force=1000)
-        p.setJointMotorControl2(turtle, 1, p.VELOCITY_CONTROL, targetVelocity=(forward+turn)*speed, force=1000)
-        p.stepSimulation()
+    # Generate trajectory using psto
+    control_input = psto(turtle, start_state, initial_control_sequence, num_iters, path_std)
+    if np.linalg.norm(robot_state[:2] - get_target_state(target)[:2]) >= 0.65:
+        # Follow the generated trajectory
+        for i in range(num_iters):
+            forward = control_input[i, 0]
         
-        # Get the robot's new state after applying the control input
-        robot_state = get_robot_state(turtle)
-        
-        # Check if the robot has reached the goal
-        if np.linalg.norm(robot_state[:2] - goal_state[:2]) < 0.1:
-            break
-        
-    # If the robot hasn't reached the target, try again with a perturbed path
-    if np.linalg.norm(robot_state[:2] - goal_state[:2]) >= 0.1:
-        for i in range(num_paths):
-            # Generate perturbed path
-            perturbed_path = path + np.random.normal(scale=path_std, size=(num_iters, 2))
+            turn = control_input[i, 1]
             
-            # Generate trajectory using PBSTO
-            control_input = psto(turtle, start_state, goal_state, delta_t, num_samples, num_iters)
-            
-            # Follow the generated trajectory
-            for j in range(num_iters):
-                forward = control_input[j % 2]
-                turn = 0
-                p.setJointMotorControl2(turtle, 0, p.VELOCITY_CONTROL, targetVelocity=(forward-turn)*speed, force=1000)
-                p.setJointMotorControl2(turtle, 1, p.VELOCITY_CONTROL, targetVelocity=(forward+turn)*speed, force=1000)
+            # Calculate the duration of the control input
+            control_duration = delta_t * num_samples
+
+            # Calculate the number of simulation steps required to execute the control input
+            num_sim_steps = int(np.ceil(control_duration / p.getPhysicsEngineParameters()['fixedTimeStep']))
+
+
+            # Call stepSimulation for the calculated number of steps
+            for _ in range(num_sim_steps):
                 p.stepSimulation()
-                
-                # Get the robot's new state after applying the control input
-                robot_state = get_robot_state(turtle)
-                
-                # Check if the robot has reached the goal
-                if np.linalg.norm(robot_state[:2] - goal_state[:2]) < 0.1:
-                    break
+
+            p.setJointMotorControl2(turtle, 0, p.VELOCITY_CONTROL, targetVelocity=(forward-turn)*speed, force=1000)
+            p.setJointMotorControl2(turtle, 1, p.VELOCITY_CONTROL, targetVelocity=(forward+turn)*speed, force=1000)
             
-            # If the robot has reached the target, stop trying new paths
-            if np.linalg.norm(robot_state[:2] - goal_state[:2]) < 0.1:
+            
+            # Get the robot's new state after applying the control input
+            robot_state = get_robot_state(turtle)
+            target_state = get_target_state(target)
+            
+            # Check if the robot has reached the goal
+            if np.linalg.norm(robot_state[:2] - target_state[:2]) < 0.65:
                 break
-        
-    # If the robot has reached the target, stop the simulation
-    if np.linalg.norm(robot_state[:2] - goal_state[:2]) < 0.1:
-        break
+
+        # If the robot has reached the target, stop the simulation
+        if np.linalg.norm(robot_state[:2] - target_state[:2]) < 0.65:
+            break
 
 # stop the simulation once the turtle reaches the target
 p.disconnect()
