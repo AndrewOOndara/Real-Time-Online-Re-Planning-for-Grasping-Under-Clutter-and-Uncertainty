@@ -96,12 +96,14 @@ num_paths = 10
 path_std = 0.1
 speed = 1
 
-p.setTimeStep(1/40)
+p.setTimeStep(1/35)
 
 # initialize robot and goal state
 start_state = get_robot_state(turtle)
 max = 0
-while np.linalg.norm(robot_state[:2] - get_target_state(target)[:2]) >= 0.65:
+
+initial_test = 0
+while np.linalg.norm(robot_state[:2] - get_target_state(target)[:2]) >= 0.6:
     # Reset the simulation
     reset_simulation()
     print("reset")
@@ -112,7 +114,13 @@ while np.linalg.norm(robot_state[:2] - get_target_state(target)[:2]) >= 0.65:
     initial_control_sequence[:, 1] = 0.0
     
     # Generate trajectory using psto
-    control_input = psto(turtle, start_state, initial_control_sequence, num_iters, path_std)
+    if(initial_test == 0):
+        control_input = initial_control_sequence
+    else:
+         control_input = psto(turtle, start_state, initial_control_sequence, num_iters, path_std)
+
+    initial_test += 1
+
     if np.linalg.norm(robot_state[:2] - get_target_state(target)[:2]) >= 0.65:
         # Follow the generated trajectory
         for i in range(num_iters):
