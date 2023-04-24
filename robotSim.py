@@ -1,6 +1,7 @@
 import pybullet as p
 import pybullet_data as pd
 import numpy as np
+import time
 
 
 # open the GUI
@@ -72,8 +73,6 @@ def psto(robot, start_state, initial_control_sequence, num_iters, path_std):
     for i in range(num_iters):
         # Add Gaussian noise to the initial control sequence
         noise = np.random.normal(loc=0, scale=path_std, size=initial_control_sequence.shape[1])
-        if i == 0 or i == 1:
-            noise[1] = 0.0
         noisy_control_input = initial_control_sequence[i] + noise
         
         control_input[i] = noisy_control_input
@@ -91,10 +90,9 @@ robot_state = get_robot_state(turtle)
 # set up PBSTO parameters
 delta_t = 0.01
 num_samples = 100
-num_iters = 50
-num_paths = 10
+num_iters = 10
 path_std = 0.1
-speed = 1
+speed = 5
 
 p.setTimeStep(1/35)
 
@@ -103,7 +101,7 @@ start_state = get_robot_state(turtle)
 max = 0
 
 initial_test = 0
-while np.linalg.norm(robot_state[:2] - get_target_state(target)[:2]) >= 0.6:
+while np.linalg.norm(get_robot_state(turtle)[:2] - get_target_state(target)[:2]) >= 0.65:
     # Reset the simulation
     reset_simulation()
     print("reset")
@@ -116,8 +114,10 @@ while np.linalg.norm(robot_state[:2] - get_target_state(target)[:2]) >= 0.6:
     # Generate trajectory using psto
     if(initial_test == 0):
         control_input = initial_control_sequence
+        print(control_input)
     else:
          control_input = psto(turtle, start_state, initial_control_sequence, num_iters, path_std)
+         print(control_input)
 
     initial_test += 1
 
@@ -153,7 +153,30 @@ while np.linalg.norm(robot_state[:2] - get_target_state(target)[:2]) >= 0.6:
 
         # If the robot has reached the target, stop the simulation
         if np.linalg.norm(robot_state[:2] - target_state[:2]) < 0.65:
+            successful_control_input = control_input
             break
 
 # stop the simulation once the turtle reaches the target
+# Reset the simulation
+reset_simulation()
+# Set real-time simulation mode
+
+
+print(successful_control_input)
+# Execute the successful control input in real-time
+for i in range(num_iters):
+    forward = successful_control_input[i, 0]
+    turn = successful_control_input[i, 1]
+
+    for _ in range(num_sim_steps):
+        p.stepSimulation()
+
+    p.setJointMotorControl2(turtle, 0, p.VELOCITY_CONTROL, targetVelocity=(forward-turn)*speed, force=1000)
+    p.setJointMotorControl2(turtle, 1, p.VELOCITY_CONTROL, targetVelocity=(forward+turn)*speed, force=1000)
+
+    # Sleep for the duration of the control input
+    time.sleep(1/35)
+    # set control use step put a sleep after 1/100. remember how many times step simulation was called and do that for the same replay
+
+# Disconnect from the simulation
 p.disconnect()
