@@ -11,9 +11,10 @@ p.setAdditionalSearchPath(pd.getDataPath())
 
 p.setRealTimeSimulation(0)
 
+target_pos = [4, 0, 0]
 # load files and place them at the offsets
 start_position = [0, 0, 1]
-goal_state = np.array([3, 0, 0])
+goal_state = np.array(target_pos)
 
 # calculate the angle between the robot and the target
 angle = np.arctan2(goal_state[1] - start_position[1], goal_state[0] - start_position[0])
@@ -23,8 +24,24 @@ angle = np.arctan2(goal_state[1] - start_position[1], goal_state[0] - start_posi
 ori = p.getQuaternionFromEuler([0, 0, angle])
 turtle = p.loadURDF("urdf/most_simple_turtle.urdf",[0,0,1], ori)
 plane = p.loadURDF("plane100.urdf")
-target = p.loadURDF("urdf/target.urdf", [3,0,1])
-obstacle = p.loadURDF("urdf/box.urdf", [2,0,1])
+target = p.loadURDF("urdf/target.urdf", target_pos)
+obstacle_positions = [
+    [3, 0, 1],
+    [3, -1, 1],
+    [4, 0.5, 1],
+    [5, -0.5, 1],
+    [6, 1.5, 1],
+    [6, -1.5, 1],
+    [4.5, 1, 1],
+    [4.5, -1, 1],
+    [5.5, 0, 1],
+]
+
+obstacles = []
+for position in obstacle_positions:
+    obstacle = p.loadURDF("urdf/box.urdf", position)
+    obstacles.append(obstacle)
+
 
 
 
@@ -55,14 +72,12 @@ def set_robot_state(robot, state):
     p.resetBasePositionAndOrientation(robot, pos, ori)
     p.resetBaseVelocity(robot, [state[3], state[4], 0], [0, 0, state[5]])
 
-# Helper function to reset the simulation
 def reset_simulation():
-    p.resetBasePositionAndOrientation(turtle, [0,0,1], [0,0,0,1])
-    p.resetBasePositionAndOrientation(target, [3,0,1], [0,0,0,1])
-    p.resetBasePositionAndOrientation(obstacle, [2,0,1], [0,0,0,1])
+    p.resetBasePositionAndOrientation(turtle, [0, 0, 1], ori)
+    p.resetBasePositionAndOrientation(target, target_pos, [0, 0, 0, 1])
+    for i, obstacle_pos in enumerate(obstacle_positions):
+        p.resetBasePositionAndOrientation(obstacles[i], obstacle_pos, [0, 0, 0, 1])
 
-def add_gaussian_noise(path, std):
-    return path + np.random.normal(loc=0, scale=std, size=path.shape)
 
 def psto(robot, start_state, initial_control_sequence, num_iters, path_std):
     
@@ -88,17 +103,19 @@ def psto(robot, start_state, initial_control_sequence, num_iters, path_std):
 robot_state = get_robot_state(turtle)
 
 # set up PBSTO parameters
-delta_t = 0.01
-num_samples = 100
-num_iters = 10
+delta_t = 0.5
+num_samples = 50
+num_iters = 15
 path_std = 0.1
-speed = 5
+speed = 10
 
 p.setTimeStep(1/35)
 
 # initialize robot and goal state
 start_state = get_robot_state(turtle)
 max = 0
+
+successful_control_input = {}
 
 initial_test = 0
 while np.linalg.norm(get_robot_state(turtle)[:2] - get_target_state(target)[:2]) >= 0.65:
@@ -129,10 +146,11 @@ while np.linalg.norm(get_robot_state(turtle)[:2] - get_target_state(target)[:2])
             turn = control_input[i, 1]
             
             # Calculate the duration of the control input
-            control_duration = delta_t * num_samples
+            control_duration = delta_t
 
             # Calculate the number of simulation steps required to execute the control input
-            num_sim_steps = int(np.ceil(control_duration / p.getPhysicsEngineParameters()['fixedTimeStep']))
+            num_sim_steps = int(np.ceil(control_duration / (p.getPhysicsEngineParameters()['fixedTimeStep'])))
+            print(num_sim_steps)
 
 
             # Call stepSimulation for the calculated number of steps
@@ -149,34 +167,47 @@ while np.linalg.norm(get_robot_state(turtle)[:2] - get_target_state(target)[:2])
             
             # Check if the robot has reached the goal
             if np.linalg.norm(robot_state[:2] - target_state[:2]) < 0.65:
+                successful_control_input = control_input
                 break
 
         # If the robot has reached the target, stop the simulation
         if np.linalg.norm(robot_state[:2] - target_state[:2]) < 0.65:
-            successful_control_input = control_input
             break
 
 # stop the simulation once the turtle reaches the target
-# Reset the simulation
+
+
 reset_simulation()
-# Set real-time simulation mode
-
-
+time.sleep(5)
+print("success")
 print(successful_control_input)
-# Execute the successful control input in real-time
-for i in range(num_iters):
-    forward = successful_control_input[i, 0]
-    turn = successful_control_input[i, 1]
 
-    for _ in range(num_sim_steps):
-        p.stepSimulation()
+p.setTimeStep(1/35)
+while  True:
+    reset_simulation()
+    control_input = successful_control_input
 
-    p.setJointMotorControl2(turtle, 0, p.VELOCITY_CONTROL, targetVelocity=(forward-turn)*speed, force=1000)
-    p.setJointMotorControl2(turtle, 1, p.VELOCITY_CONTROL, targetVelocity=(forward+turn)*speed, force=1000)
+    # Follow the generated trajectory
+    for i in range(num_iters):
+        forward = control_input[i, 0]
 
-    # Sleep for the duration of the control input
-    time.sleep(1/35)
-    # set control use step put a sleep after 1/100. remember how many times step simulation was called and do that for the same replay
+        turn = control_input[i, 1]
+        
+        # Calculate the duration of the control input
+        control_duration = delta_t
 
-# Disconnect from the simulation
+        # Calculate the number of simulation steps required to execute the control input
+        num_sim_steps = int(np.ceil(control_duration / (p.getPhysicsEngineParameters()['fixedTimeStep'])))
+
+
+        # Call stepSimulation for the calculated number of steps
+        for _ in range(num_sim_steps):
+            p.stepSimulation()
+
+        p.setJointMotorControl2(turtle, 0, p.VELOCITY_CONTROL, targetVelocity=(forward-turn)*speed, force=1000)
+        p.setJointMotorControl2(turtle, 1, p.VELOCITY_CONTROL, targetVelocity=(forward+turn)*speed, force=1000)
+    
+
+    
+
 p.disconnect()
