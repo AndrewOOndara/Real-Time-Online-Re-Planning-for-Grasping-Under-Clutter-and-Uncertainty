@@ -11,7 +11,7 @@ p.setAdditionalSearchPath(pd.getDataPath())
 
 p.setRealTimeSimulation(0)
 
-target_pos = [6, -1, 0]
+target_pos = [6, 0, 0]
 # load files and place them at the offsets
 start_position = [0, 0, 1]
 goal_state = np.array(target_pos)
