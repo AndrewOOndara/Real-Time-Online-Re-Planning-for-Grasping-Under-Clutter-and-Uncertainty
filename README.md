@@ -1,4 +1,4 @@
-# robotSim
+
 # Real-Time Online Re-Planning for Grasping Under Clutter and Uncertainty
 
 This repository contains code for a real-time robotic navigation system implemented in PyBullet. The system is based on the paper "Real-Time Online Re-Planning for Grasping Under Clutter and Uncertainty" by [Author Name(s)]. It utilizes physics-based optimization for dynamic obstacle avoidance and trajectory adaptation, aiming to improve the speed and accuracy of the robot's grasping task in cluttered and uncertain environments.
