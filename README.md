@@ -1,7 +1,7 @@
 
 # Real-Time Online Re-Planning for Grasping Under Clutter and Uncertainty
 
-This repository contains code for a real-time robotic navigation system implemented in PyBullet. The system is based on the paper "Real-Time Online Re-Planning for Grasping Under Clutter and Uncertainty" by Wisdom C. Agboh, Mehmet R. Dogar. It utilizes physics-based optimization for dynamic obstacle avoidance and trajectory adaptation, aiming to improve the speed and accuracy of the robot's grasping task in cluttered and uncertain environments.
+This repository contains code for a real-time robotic navigation system implemented in PyBullet. The system is based on the paper "Real-Time Online Re-Planning for Grasping Under Clutter and Uncertainty" by Wisdom C. Agboh, Mehmet R. Dogar. It utilizes physics-based optimization for dynamic obstacle avoidance and trajectory adaptation, aiming to improve the speed and accuracy of the robot's navigation task in cluttered and uncertain environments.
 
 ## Paper Reference
 If you use this code for your research or find it helpful, please consider citing the following paper:
